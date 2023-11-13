@@ -295,3 +295,197 @@ HAVING COUNT(*) > 1)
 
 SELECT COUNT(*) FROM company
 
+/*
+Q9:
+
+Assume you're given the tables containing completed 
+trade orders and user details in a Robinhood trading system.
+
+Write a query to retrieve the top three cities that 
+have the highest number of completed trade orders listed in 
+descending order. Output the city name and the corresponding number of completed trade orders.
+
+*/
+
+SELECT U.city, COUNT(*) AS total_orders FROM trades T 
+INNER JOIN users U ON T.user_id = U.user_id
+WHERE T.status = 'Completed' GROUP BY U.city 
+ORDER BY total_orders DESC LIMIT 3;
+
+
+SELECT u.city, 
+SUM(CASE WHEN t.status = 'Completed' THEN 1 ELSE 0 END) as total_orders
+FROM trades as t
+JOIN users as u ON t.user_id = u.user_id
+GROUP BY u.city
+ORDER BY total_orders DESC
+LIMIT 3;
+
+
+/*
+Q10 :
+
+Given the reviews table, write a query to retrieve the average star rating for each product, 
+grouped by month. The output should display the month as a 
+numerical value, product ID, and average star rating rounded to two decimal places. 
+Sort the output first by month and then by product ID.
+
+*/
+
+SELECT product_id, ROUND(AVG(stars),2) AS avg_stars,
+EXTRACT(MONTH from submit_date) AS mth FROM reviews 
+GROUP BY product_id,EXTRACT(MONTH from submit_date)
+ORDER BY mth,product_id;
+
+/*
+Q11: 
+
+Assume you have an events table on Facebook app analytics. Write a query to calculate the click-through rate (CTR) 
+for the app in 2022 and round the results to 2 decimal places.
+
+Definition and note:
+
+Percentage of click-through rate (CTR) = 100.0 * Number of clicks / Number of impressions
+To avoid integer division, multiply the CTR by 100.0, not 100.
+
+*/
+
+SELECT Q1.app_id, ROUND(clk * 100.0 / imp, 2) AS ctr
+FROM (
+    SELECT app_id,COUNT(*) AS clk FROM events 
+    WHERE event_type = 'click' AND EXTRACT(YEAR FROM timestamp) = 2022
+    GROUP BY app_id) AS Q1,
+    (
+        SELECT app_id,COUNT(*) AS imp FROM events 
+        WHERE event_type = 'impression' AND EXTRACT(YEAR FROM timestamp) = 2022
+        GROUP BY app_id) AS Q2 
+WHERE Q1.app_id = Q2.app_id;
+
+
+
+SELECT app_id,
+ROUND((100.0*  SUM(CASE WHEN event_type = 'click' THEN 1 ELSE 0 END)/
+SUM(CASE WHEN event_type = 'impression' THEN 1 ELSE 0 END) 
+    ),2) AS ctr
+FROM events
+WHERE EXTRACT(YEAR from timestamp) = '2022'
+GROUP BY app_id;
+
+
+
+WITH click_per_id AS (
+SELECT app_id,
+        COUNT(event_type) AS count_clicks
+FROM events
+WHERE event_type = 'click'
+      AND EXTRACT(year FROM timestamp) = '2022'
+GROUP BY app_id),
+
+impression_per_id AS (
+SELECT app_id, COUNT(event_type) AS count_impr
+FROM events
+WHERE event_type = 'impression'
+      AND EXTRACT(year FROM timestamp) = '2022'
+GROUP BY app_id)
+
+SELECT clk.app_id,
+        ROUND(100.0*clk.count_clicks/imp.count_impr,2) AS ctr
+FROM click_per_id AS clk
+LEFT JOIN impression_per_id AS imp
+ON clk.app_id = imp.app_id;
+
+/*
+
+Q12 : Medium
+
+Assume you are given the table below on Uber transactions made by users. 
+Write a query to obtain the third transaction of every user. 
+Output the user id, spend and transaction date.
+
+*/
+
+/*
+
+The SQL PARTITION BY expression is a subclause of the OVER clause, 
+which is used in almost all invocations of window functions like AVG(), 
+MAX(), and RANK(). As many readers probably know, window functions operate 
+on window frames which are sets of rows that can be different for each record in the query result. 
+This is where the SQL PARTITION BY subclause comes in: it is used to define which records 
+to make part of the window frame associated with each record of the result.
+
+Examples :
+
+
+SELECT
+    car_make,
+    car_model,
+    car_price,
+    AVG(car_price) OVER() AS "overall average price",
+    AVG(car_price) OVER (PARTITION BY car_type) AS "car type average price"
+FROM car_list_prices
+
+SELECT first_name, last_name, level, years_experience,
+       RANK() OVER (ORDER BY years_experience DESC),
+       DENSE_RANK() OVER (ORDER BY years_experience DESC),
+       ROW_NUMBER() OVER (ORDER BY years_experience DESC)
+FROM developers;
+
+SELECT first_name, last_name, level, years_experience,
+       RANK() OVER (PARTITION BY level ORDER BY years_experience DESC)
+FROM developers;
+
+*/
+
+WITH CTE AS (SELECT user_id, spend, transaction_date,
+ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY transaction_date) 
+AS rank FROM transactions)
+
+SELECT user_id,spend,transaction_date FROM CTE WHERE rank = 3;
+
+
+/*
+
+Q13 : Medium
+
+
+This is the same question as problem #25 in the SQL Chapter of Ace the Data Science Interview!
+
+Assume you're given tables with information on Snapchat users, including their ages and time spent sending and opening snaps.
+
+Write a query to obtain a breakdown of the time spent sending vs. opening snaps as a percentage of 
+total time spent on these activities grouped by age group. Round the percentage to 2 decimal places in the output.
+
+Notes:
+
+Calculate the following percentages:
+time spent sending / (Time spent sending + Time spent opening)
+Time spent opening / (Time spent sending + Time spent opening)
+To avoid integer division in percentages, multiply by 100.0 and not 100.
+
+*/
+
+
+
+WITH CTE1 AS (SELECT AB.age_bucket,SUM(A.time_spent) AS open 
+FROM activities A,age_breakdown AB
+WHERE A.user_id = AB.user_id AND A.activity_type = 'open' GROUP BY AB.age_bucket),
+
+CTE2 AS (SELECT AB.age_bucket, SUM(A.time_spent) AS send 
+FROM activities A,age_breakdown AB
+WHERE A.user_id = AB.user_id AND A.activity_type = 'send' GROUP BY AB.age_bucket)
+
+SELECT C1.age_bucket,ROUND((100.0*C2.send/(C1.open + C2.send)),2) AS send_perc,
+ROUND((100.0*C1.open/(C2.send + C1.open)),2) AS open_perc
+FROM CTE1 C1,CTE2 C2 WHERE C1.age_bucket = C2.age_bucket;
+
+
+
+
+with cte as (SELECT *,
+(CASE WHEN activity_type='open' then time_spent else 0 END) as t1,
+(CASE WHEN activity_type='send' then time_spent else 0 END) as t2
+FROM activities a1 join age_breakdown a2
+on a1.user_id=a2.user_id where activity_type in ('send','open'))
+
+SELECT age_bucket,round(SUM(t1)*100.0/SUM(t1+t2),2) as open_perc,
+round(SUM(t2)*100.0/SUM(t1+t2),2) as send_perc from cte GROUP BY 1
