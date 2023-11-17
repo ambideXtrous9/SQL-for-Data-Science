@@ -447,7 +447,6 @@ SELECT user_id,spend,transaction_date FROM CTE WHERE rank = 3;
 
 Q13 : Medium
 
-
 This is the same question as problem #25 in the SQL Chapter of Ace the Data Science Interview!
 
 Assume you're given tables with information on Snapchat users, including their ages and time spent sending and opening snaps.
@@ -480,7 +479,6 @@ FROM CTE1 C1,CTE2 C2 WHERE C1.age_bucket = C2.age_bucket;
 
 
 
-
 with cte as (SELECT *,
 (CASE WHEN activity_type='open' then time_spent else 0 END) as t1,
 (CASE WHEN activity_type='send' then time_spent else 0 END) as t2
@@ -489,3 +487,85 @@ on a1.user_id=a2.user_id where activity_type in ('send','open'))
 
 SELECT age_bucket,round(SUM(t1)*100.0/SUM(t1+t2),2) as open_perc,
 round(SUM(t2)*100.0/SUM(t1+t2),2) as send_perc from cte GROUP BY 1
+
+/*
+
+Q14: Medium
+
+Given a table of tweet data over a specified time period, calculate the 3-day rolling average of tweets for each user. Output the user ID, tweet date, and rolling averages rounded to 2 decimal places.
+
+Notes:
+
+A rolling average, also known as a moving average or running mean is a time-series technique that examines trends in data over a specified period of time.
+In this case, we want to determine how the tweet count for each user changes over a 3-day period.
+Effective April 7th, 2023, the problem statement, solution and hints for this question have been revised.
+
+Concept of Rolling Sum is needed.
+
+OVER, PARTITION BY, CTE, ROWS BETWEEN, PRECEDING, CURRENT ROW
+
+*/
+
+
+WITH CTE AS
+(SELECT user_id, tweet_date,AVG(tweet_count) OVER(PARTITION BY user_id ORDER BY tweet_date
+ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) 
+AS TC FROM tweets)
+
+SELECT user_id, tweet_date, ROUND(TC,2) AS rolling_avg_3d FROM CTE;
+
+/*
+
+Q15 : Medium
+
+This is the same question as problem #12 in the SQL Chapter of Ace the Data Science Interview!
+
+Assume you're given a table containing data on Amazon customers and their spending on products in different category, 
+write a query to identify the top two highest-grossing products within each category in the year 2022. The output should include 
+the category, product, and total spend.
+
+*/
+
+
+SELECT category, product, SUM(spend) AS total_spend
+FROM product_spend WHERE EXTRACT(YEAR FROM transaction_date) = 2022
+GROUP BY category, product;
+
+--- Now we need to rank within the group, by Sum(Spend)
+---  DENSE_RANK() OVER(PARTITION BY category ORDER BY SUM(spend) DESC) AS rankno
+
+
+
+WITH CTE AS
+(SELECT category, product, SUM(spend) AS total_spend, DENSE_RANK()
+OVER(PARTITION BY category ORDER BY SUM(spend) DESC) AS rankno
+FROM product_spend WHERE EXTRACT(YEAR FROM transaction_date) = 2022
+GROUP BY category, product)
+
+SELECT category, product, total_spend FROM CTE 
+WHERE rankno <= 2;
+
+
+/*
+
+Q16 : Medium
+
+Assume there are three Spotify tables: artists, songs, and global_song_rank, which contain information about the artists, songs, and music charts, respectively.
+
+Write a query to find the top 5 artists 
+whose songs appear most frequently in the Top 10 of the global_song_rank table. Display the top 5 artist 
+names in ascending order, along with their song appearance ranking.
+
+If two or more artists have the same number of song appearances, they should be assigned the same ranking
+
+
+*/
+
+WITH CTE AS (SELECT A.artist_id, A.artist_name, COUNT(*) AS cnt
+FROM artists A,songs S,global_song_rank GSR
+WHERE A.artist_id = S.artist_id AND S.song_id = GSR.song_id AND
+GSR.rank <= 10 GROUP BY A.artist_id, A.artist_name ORDER BY cnt DESC),
+
+CTE2 AS (SELECT artist_name, DENSE_RANK() OVER(ORDER BY cnt DESC) AS artist_rank FROM CTE)
+
+SELECT artist_name,artist_rank FROM CTE2 WHERE artist_rank <=5;
